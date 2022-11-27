@@ -2,8 +2,9 @@ package net
 
 import (
 	"context"
-	sdkTrace "go.opentelemetry.io/otel/sdk/trace"
 	"testing"
+
+	sdkTrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 func Test_configAgent(t *testing.T) {
