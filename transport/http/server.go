@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/weiqiangxu/net/transport"
 	"github.com/weiqiangxu/user/config"
-	"github.com/weiqiangxu/user/net/transport"
 
 	"github.com/weiqiangxu/common-config/logger"
 

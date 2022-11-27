@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/weiqiangxu/common-config/logger"
-	"github.com/weiqiangxu/user/net/transport"
+	"github.com/weiqiangxu/net/transport"
 
 	grpcRecovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"

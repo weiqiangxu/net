@@ -4,7 +4,7 @@ import (
 	"context"
 	"os"
 
-	"github.com/weiqiangxu/user/net/transport"
+	"github.com/weiqiangxu/net/transport"
 )
 
 // Option is an application option.
