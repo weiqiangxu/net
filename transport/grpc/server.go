@@ -2,6 +2,7 @@ package grpc
 
 import (
 	"context"
+	"github.com/weiqiangxu/net/transport"
 	"net"
 	"net/url"
 	"sync"
@@ -10,8 +11,6 @@ import (
 	"github.com/weiqiangxu/net/tool"
 
 	"github.com/weiqiangxu/common-config/logger"
-	"github.com/weiqiangxu/net/transport"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
@@ -20,13 +19,10 @@ import (
 
 var _ transport.Server = (*Server)(nil)
 
+const DefaultNetProtocol = "tcp"
+const DefaultNetAddress = ":0"
 const HealthcheckService = "grpc.health.v1.Health"
-
-type schemeType string
-
-const (
-	GRPC schemeType = "grpc"
-)
+const SchemeOfGrpc = "grpc"
 
 type Server struct {
 	*grpc.Server
@@ -47,7 +43,7 @@ type Server struct {
 }
 
 func NewServer(opts ...ServerOption) *Server {
-	server := &Server{network: "tcp", address: ":0", timeout: 1 * time.Second, health: health.NewServer()}
+	server := &Server{network: DefaultNetProtocol, address: DefaultNetAddress, timeout: 1 * time.Second, health: health.NewServer()}
 	for _, o := range opts {
 		o(server)
 	}
@@ -100,7 +96,7 @@ func (s *Server) endpointListen() (*url.URL, error) {
 			return
 		}
 		s.listener = lis
-		s.endpoint = &url.URL{Scheme: string(GRPC), Host: addr}
+		s.endpoint = &url.URL{Scheme: SchemeOfGrpc, Host: addr}
 	})
 	if s.err != nil {
 		return nil, s.err
