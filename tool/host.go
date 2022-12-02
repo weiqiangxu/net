@@ -9,6 +9,8 @@ import (
 // isValidIP check addr is ip
 func isValidIP(addr string) bool {
 	ip := net.ParseIP(addr)
+	// 报告ip是否为全局单播
+	// ip是否接口本地多播地址
 	return ip.IsGlobalUnicast() && !ip.IsInterfaceLocalMulticast()
 }
 
