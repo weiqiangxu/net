@@ -20,56 +20,22 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
+const (
+	DefaultHttpNetwork = "tcp"
+	DefaultHttpAddress = ":0"
+)
+
 var _ transport.Server = (*Server)(nil)
 
-type ServerOption func(*Server)
-
 type Server struct {
-	gin        *gin.Engine
-	httpServer *http.Server
-	address    string
-	network    string
-	ms         []gin.HandlerFunc
-	prometheus bool
-	profile    bool
-	tracing    bool
-	verbose    bool
-}
-
-func WithMiddleware(m ...gin.HandlerFunc) ServerOption {
-	return func(server *Server) {
-		server.ms = m
-	}
-}
-
-func WithAddress(addr string) ServerOption {
-	return func(server *Server) {
-		server.address = addr
-	}
-}
-
-func WithPrometheus(enablePrometheus bool) ServerOption {
-	return func(server *Server) {
-		server.prometheus = enablePrometheus
-	}
-}
-
-func WithProfile(profile bool) ServerOption {
-	return func(server *Server) {
-		server.profile = profile
-	}
-}
-
-func WithTracing(tracing bool) ServerOption {
-	return func(server *Server) {
-		server.tracing = tracing
-	}
-}
-
-func WithVerbose(verbose bool) ServerOption {
-	return func(server *Server) {
-		server.verbose = verbose
-	}
+	gin           *gin.Engine
+	httpServer    *http.Server
+	address       string
+	network       string
+	handlersChain []gin.HandlerFunc
+	prometheus    bool
+	profile       bool
+	tracing       bool
 }
 
 func NewServer(opts ...ServerOption) *Server {
@@ -77,8 +43,8 @@ func NewServer(opts ...ServerOption) *Server {
 	gin.DisableConsoleColor()
 	g := gin.New()
 	srv := &Server{
-		network: "tcp",
-		address: ":0",
+		network: DefaultHttpNetwork,
+		address: DefaultHttpAddress,
 	}
 	for _, o := range opts {
 		o(srv)
@@ -86,7 +52,9 @@ func NewServer(opts ...ServerOption) *Server {
 	if srv.prometheus {
 		g.GET("metrics", gin.WrapH(promhttp.Handler()))
 		prometheus.Unregister(collectors.NewGoCollector())
-		prometheus.Unregister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts(prometheus.ProcessCollectorOpts{})))
+		collectorOpt := collectors.ProcessCollectorOpts(prometheus.ProcessCollectorOpts{})
+		collector := collectors.NewProcessCollector(collectorOpt)
+		prometheus.Unregister(collector)
 	}
 	if srv.profile {
 		ginPprof.Register(g)
@@ -94,8 +62,8 @@ func NewServer(opts ...ServerOption) *Server {
 	if srv.tracing {
 		g.Use(otelgin.Middleware(config.Conf.Application.Name))
 	}
-	if len(srv.ms) > 0 {
-		g.Use(srv.ms...)
+	if len(srv.handlersChain) > 0 {
+		g.Use(srv.handlersChain...)
 	}
 	g.Use(GinZapWithConfig(&GinLoggerConfig{
 		TimeFormat: time.RFC3339,
@@ -110,6 +78,7 @@ func NewServer(opts ...ServerOption) *Server {
 	return srv
 }
 
+// Server gin
 func (s *Server) Server() *gin.Engine {
 	return s.gin
 }

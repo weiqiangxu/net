@@ -10,24 +10,20 @@ import (
 	grpcInsecure "google.golang.org/grpc/credentials/insecure"
 )
 
+// Dial rpc client dial an address
 func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 	options := clientOptions{}
 	for _, o := range opts {
 		o(&options)
 	}
-	var unaryInterceptors []grpc.UnaryClientInterceptor
-	var streamInterceptors []grpc.StreamClientInterceptor
-	if len(options.interceptors) > 0 {
-		unaryInterceptors = append(unaryInterceptors, options.interceptors...)
-	}
 	if options.tracing {
-		unaryInterceptors = append(unaryInterceptors, otelgrpc.UnaryClientInterceptor())
-		streamInterceptors = append(streamInterceptors, otelgrpc.StreamClientInterceptor())
+		options.unaryInterceptors = append(options.unaryInterceptors, otelgrpc.UnaryClientInterceptor())
+		options.streamInterceptors = append(options.streamInterceptors, otelgrpc.StreamClientInterceptor())
 	}
 	grpcOpts := []grpc.DialOption{
 		grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": %q}`, roundrobin.Name)),
-		grpc.WithChainUnaryInterceptor(unaryInterceptors...),
-		grpc.WithChainStreamInterceptor(streamInterceptors...),
+		grpc.WithChainUnaryInterceptor(options.unaryInterceptors...),
+		grpc.WithChainStreamInterceptor(options.streamInterceptors...),
 	}
 	if options.insecure {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(grpcInsecure.NewCredentials()))

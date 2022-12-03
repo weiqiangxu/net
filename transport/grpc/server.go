@@ -2,11 +2,12 @@ package grpc
 
 import (
 	"context"
-	"github.com/weiqiangxu/net/transport"
 	"net"
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/weiqiangxu/net/transport"
 
 	"github.com/weiqiangxu/net/tool"
 
@@ -19,10 +20,12 @@ import (
 
 var _ transport.Server = (*Server)(nil)
 
-const DefaultNetProtocol = "tcp"
-const DefaultNetAddress = ":0"
-const HealthcheckService = "grpc.health.v1.Health"
-const SchemeOfGrpc = "grpc"
+const (
+	DefaultNetProtocol = "tcp"
+	DefaultNetAddress  = ":0"
+	HealthcheckService = "grpc.health.v1.Health"
+	SchemeOfGrpc       = "grpc"
+)
 
 type Server struct {
 	*grpc.Server

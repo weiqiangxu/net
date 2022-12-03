@@ -40,7 +40,16 @@ func GinZapWithConfig(conf *GinLoggerConfig) gin.HandlerFunc {
 			if conf.UTC {
 				end = end.UTC()
 			}
-			logger.Infow(path, "method", c.Request.Method, "status", c.Writer.Status(), "query", query, "ip", c.ClientIP(), "user-agent", c.Request.UserAgent(), "latency", latency, "time", end.Format(conf.TimeFormat))
+			messages := []interface{}{
+				"method", c.Request.Method,
+				"status", c.Writer.Status(),
+				"query", query,
+				"ip", c.ClientIP(),
+				"user-agent", c.Request.UserAgent(),
+				"latency", latency,
+				"time", end.Format(conf.TimeFormat),
+			}
+			logger.Infow(path, messages...)
 		}
 	}
 }
@@ -59,26 +68,43 @@ func RecoveryWithZap(stack bool) gin.HandlerFunc {
 				var brokenPipe bool
 				if ne, ok := err.(*net.OpError); ok {
 					if se, ok := ne.Err.(*os.SyscallError); ok {
-						if strings.Contains(strings.ToLower(se.Error()), "broken pipe") || strings.Contains(strings.ToLower(se.Error()), "connection reset by peer") {
+						isBrokenPipe := strings.Contains(strings.ToLower(se.Error()), "broken pipe")
+						isReset := strings.Contains(strings.ToLower(se.Error()), "connection reset by peer")
+						if isBrokenPipe || isReset {
 							brokenPipe = true
 						}
 					}
 				}
-
 				httpRequest, _ := httputil.DumpRequest(c.Request, false)
 				if brokenPipe {
-					logger.Errorw(c.Request.URL.Path, "error", err, "request", string(httpRequest))
+					message := []interface{}{
+						"error", err,
+						"request", string(httpRequest),
+					}
+					logger.Errorw(c.Request.URL.Path, message...)
 					// If the connection is dead, we can't write a status to it.
-					c.Error(err.(error)) // nolint: errcheck
+					e := c.Error(err.(error))
+					if e != nil {
+						logger.Error(e.Error())
+					}
 					c.Abort()
 					return
 				}
-
-				logger.Info("8888888888")
 				if stack {
-					logger.Errorw("[Recovery from panic]", "time", time.Now(), "error", err, "request", string(httpRequest), "stack", debug.Stack())
+					message := []interface{}{
+						"time", time.Now(),
+						"error", err,
+						"request", string(httpRequest),
+						"stack", debug.Stack(),
+					}
+					logger.Errorw("[Recovery from panic]", message...)
 				} else {
-					logger.Errorw("[Recovery from panic]", "time", time.Now(), "error", err, "request", string(httpRequest))
+					message := []interface{}{
+						"time", time.Now(),
+						"error", err,
+						"request", string(httpRequest),
+					}
+					logger.Errorw("[Recovery from panic]", message...)
 				}
 				c.AbortWithStatus(http.StatusInternalServerError)
 			}
