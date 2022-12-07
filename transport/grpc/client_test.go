@@ -27,6 +27,7 @@ func TestDial(t *testing.T) {
 					WithInSecure(true),
 					WithTracing(true),
 					WithOptions(),
+					WithPrometheus(true),
 				},
 			},
 			want:    nil,

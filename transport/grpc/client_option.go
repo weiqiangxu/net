@@ -10,6 +10,7 @@ type clientOptions struct {
 	grpcOpts           []grpc.DialOption
 	tracing            bool
 	insecure           bool
+	prometheus         bool
 }
 
 // ClientOption is gRPC client option.
@@ -19,6 +20,13 @@ type ClientOption func(o *clientOptions)
 func WithEndpoint(endpoint string) ClientOption {
 	return func(c *clientOptions) {
 		c.endpoint = endpoint
+	}
+}
+
+// WithPrometheus prometheus metrics
+func WithPrometheus(b bool) ClientOption {
+	return func(c *clientOptions) {
+		c.prometheus = b
 	}
 }
 

@@ -26,7 +26,6 @@ func GinZapWithConfig(conf *GinLoggerConfig) gin.HandlerFunc {
 	for _, path := range conf.SkipPaths {
 		skipPaths[path] = true
 	}
-
 	return func(c *gin.Context) {
 		start := time.Now()
 		// some evil middlewares modify this values

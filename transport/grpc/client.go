@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	grpcPrometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -24,6 +25,10 @@ func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 		grpc.WithDefaultServiceConfig(fmt.Sprintf(`{"LoadBalancingPolicy": %q}`, roundrobin.Name)),
 		grpc.WithChainUnaryInterceptor(options.unaryInterceptors...),
 		grpc.WithChainStreamInterceptor(options.streamInterceptors...),
+	}
+	if options.prometheus {
+		list := []grpc.DialOption{grpc.WithUnaryInterceptor(grpcPrometheus.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcPrometheus.StreamClientInterceptor)}
+		grpcOpts = append(grpcOpts, list...)
 	}
 	if options.insecure {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(grpcInsecure.NewCredentials()))
