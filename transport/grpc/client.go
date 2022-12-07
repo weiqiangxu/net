@@ -27,7 +27,11 @@ func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 		grpc.WithChainStreamInterceptor(options.streamInterceptors...),
 	}
 	if options.prometheus {
-		list := []grpc.DialOption{grpc.WithUnaryInterceptor(grpcPrometheus.UnaryClientInterceptor), grpc.WithStreamInterceptor(grpcPrometheus.StreamClientInterceptor)}
+		grpcPrometheus.EnableClientHandlingTimeHistogram()
+		list := []grpc.DialOption{
+			grpc.WithUnaryInterceptor(grpcPrometheus.UnaryClientInterceptor),
+			grpc.WithStreamInterceptor(grpcPrometheus.StreamClientInterceptor),
+		}
 		grpcOpts = append(grpcOpts, list...)
 	}
 	if options.insecure {
