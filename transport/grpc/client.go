@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/weiqiangxu/user/config"
+
 	grpcPrometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	prom "github.com/prometheus/client_golang/prometheus"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -27,7 +30,9 @@ func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 		grpc.WithChainStreamInterceptor(options.streamInterceptors...),
 	}
 	if options.prometheus {
-		grpcPrometheus.EnableClientHandlingTimeHistogram()
+		grpcPrometheus.EnableClientHandlingTimeHistogram(
+			WithGrpcHistogramName(config.Conf.Application.Name, "grpc_seconds"),
+		)
 		list := []grpc.DialOption{
 			grpc.WithUnaryInterceptor(grpcPrometheus.UnaryClientInterceptor),
 			grpc.WithStreamInterceptor(grpcPrometheus.StreamClientInterceptor),
@@ -41,4 +46,12 @@ func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 		grpcOpts = append(grpcOpts, options.grpcOpts...)
 	}
 	return grpc.DialContext(ctx, options.endpoint, grpcOpts...)
+}
+
+// WithGrpcHistogramName change prometheus histogramName
+func WithGrpcHistogramName(namespace string, name string) grpcPrometheus.HistogramOption {
+	return func(o *prom.HistogramOpts) {
+		o.Namespace = namespace
+		o.Name = name
+	}
 }
