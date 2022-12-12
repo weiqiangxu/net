@@ -3,11 +3,10 @@ package grpc
 import (
 	"context"
 	"fmt"
-
-	"github.com/weiqiangxu/user/config"
-
 	grpcPrometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/opentracing/opentracing-go"
 	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/weiqiangxu/user/config"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/balancer/roundrobin"
@@ -42,6 +41,12 @@ func Dial(ctx context.Context, opts ...ClientOption) (*grpc.ClientConn, error) {
 	if options.insecure {
 		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(grpcInsecure.NewCredentials()))
 	}
+	if options.tracerInterceptor {
+		list := []grpc.DialOption{
+			grpc.WithUnaryInterceptor(ClientInterceptor(options.tracer)),
+		}
+		grpcOpts = append(grpcOpts, list...)
+	}
 	if len(options.grpcOpts) > 0 {
 		grpcOpts = append(grpcOpts, options.grpcOpts...)
 	}
@@ -53,5 +58,18 @@ func WithGrpcHistogramName(namespace string, name string) grpcPrometheus.Histogr
 	return func(o *prom.HistogramOpts) {
 		o.Namespace = namespace
 		o.Name = name
+	}
+}
+
+// ClientInterceptor grpc client
+func ClientInterceptor(tracer opentracing.Tracer) grpc.UnaryClientInterceptor {
+	return func(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
+		parentSpan := ctx.Value("span")
+		if parentSpan != nil {
+			parentSpanContext := parentSpan.(opentracing.SpanContext)
+			child := tracer.StartSpan(method, opentracing.ChildOf(parentSpanContext))
+			defer child.Finish()
+		}
+		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 }

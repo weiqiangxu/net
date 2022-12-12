@@ -1,6 +1,9 @@
 package grpc
 
-import "google.golang.org/grpc"
+import (
+	"github.com/opentracing/opentracing-go"
+	"google.golang.org/grpc"
+)
 
 // clientOptions is gRPC Client
 type clientOptions struct {
@@ -11,6 +14,8 @@ type clientOptions struct {
 	tracing            bool
 	insecure           bool
 	prometheus         bool
+	tracer             opentracing.Tracer
+	tracerInterceptor  bool
 }
 
 // ClientOption is gRPC client option.
@@ -20,6 +25,14 @@ type ClientOption func(o *clientOptions)
 func WithEndpoint(endpoint string) ClientOption {
 	return func(c *clientOptions) {
 		c.endpoint = endpoint
+	}
+}
+
+// WithUnaryTraceInterceptor with client endpoint.
+func WithUnaryTraceInterceptor(tracer opentracing.Tracer) ClientOption {
+	return func(c *clientOptions) {
+		c.tracer = tracer
+		c.tracerInterceptor = true
 	}
 }
 
