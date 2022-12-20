@@ -18,8 +18,6 @@ type Config struct {
 	InitialCap int
 	// 最大并发存活连接数
 	MaxCap int
-	// 最大空闲连接
-	MaxIdle int
 	// 生成连接的方法
 	Factory func() (*grpc.ClientConn, error)
 	// 关闭连接的方法
@@ -50,8 +48,11 @@ type Conn struct {
 
 // New 初始化连接
 func New(poolConfig *Config) (Pool, error) {
-	if !(poolConfig.InitialCap <= poolConfig.MaxIdle && poolConfig.MaxCap >= poolConfig.MaxIdle && poolConfig.InitialCap >= 0) {
-		return nil, errors.New("invalid capacity settings")
+	if poolConfig.InitialCap > poolConfig.MaxCap {
+		return nil, errors.New("max must gte init cap")
+	}
+	if poolConfig.InitialCap == 0 || poolConfig.MaxCap == 0 {
+		return nil, errors.New("max or init cap equal zero")
 	}
 	if poolConfig.Factory == nil {
 		return nil, errors.New("invalid factory func settings")
@@ -61,7 +62,7 @@ func New(poolConfig *Config) (Pool, error) {
 	}
 
 	c := &channelPool{
-		connections:        make(chan *Conn, poolConfig.MaxIdle),
+		connections:        make(chan *Conn, poolConfig.MaxCap),
 		factory:            poolConfig.Factory,
 		close:              poolConfig.Close,
 		idleTimeout:        poolConfig.IdleTimeout,
@@ -151,21 +152,17 @@ func (c *channelPool) Put(conn *grpc.ClientConn) error {
 		return errors.New("connection is nil. rejecting")
 	}
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.connections == nil {
-		c.mu.Unlock()
 		_ = c.Close(conn)
 		return errors.New("connection is nil")
 	}
-	select {
-	case c.connections <- &Conn{c: conn, t: time.Now()}:
-		c.mu.Unlock()
-		return nil
-	default:
-		c.mu.Unlock()
-		// the connection pool is full. Close the connection directly
+	if len(c.connections) >= c.maxCap {
 		_ = c.Close(conn)
 		return nil
 	}
+	c.connections <- &Conn{c: conn, t: time.Now()}
+	return nil
 }
 
 // Close connection close
