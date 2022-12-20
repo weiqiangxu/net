@@ -36,15 +36,15 @@ type connReq struct {
 
 // channelPool 存放连接信息
 type channelPool struct {
-	mu                 sync.RWMutex
-	connections        chan *Conn
-	factory            func() (*grpc.ClientConn, error)
-	close              func(*grpc.ClientConn) error
-	ping               func(*grpc.ClientConn) error
-	idleTimeout        time.Duration
-	maxActive          int
-	openingConnections int
-	connReqs           []chan connReq
+	mu                 sync.RWMutex                     // lock
+	connections        chan *Conn                       // connection of poll
+	factory            func() (*grpc.ClientConn, error) // create connection
+	close              func(*grpc.ClientConn) error     // close connection
+	ping               func(*grpc.ClientConn) error     // usage to confirm connection us able
+	idleTimeout        time.Duration                    // every connection maximum duration available
+	maxCap             int                              // maximum number of connections
+	openingConnections int                              // open ing connection
+	connQueue          []chan connReq
 }
 
 // Conn connection of grpc
@@ -70,7 +70,7 @@ func New(poolConfig *Config) (Pool, error) {
 		factory:            poolConfig.Factory,
 		close:              poolConfig.Close,
 		idleTimeout:        poolConfig.IdleTimeout,
-		maxActive:          poolConfig.MaxCap,
+		maxCap:             poolConfig.MaxCap,
 		openingConnections: poolConfig.InitialCap,
 	}
 
@@ -90,7 +90,7 @@ func New(poolConfig *Config) (Pool, error) {
 	return c, nil
 }
 
-// getConnection 获取所有连接
+// getConnection get all connection in lock
 func (c *channelPool) getConnection() chan *Conn {
 	c.mu.Lock()
 	connections := c.connections
@@ -98,7 +98,7 @@ func (c *channelPool) getConnection() chan *Conn {
 	return connections
 }
 
-// Get 从pool中取一个连接
+// Get fetch a connection from pool
 func (c *channelPool) Get() (*grpc.ClientConn, error) {
 	connections := c.getConnection()
 	if connections == nil {
@@ -108,17 +108,19 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 		select {
 		case wrapConn := <-connections:
 			if wrapConn == nil {
-				return nil, ErrClosed
+				//return nil, ErrClosed
+				continue
 			}
-			// 判断是否超时，超时则丢弃
+			// whether the timeout occurs, and discard the timeout
 			if timeout := c.idleTimeout; timeout > 0 {
 				if wrapConn.t.Add(timeout).Before(time.Now()) {
-					// 丢弃并关闭该连接
+					// close connect once timeout
 					_ = c.Close(wrapConn.c)
 					continue
 				}
 			}
-			// 判断是否失效，失效则丢弃，如果用户没有设定 ping 方法，就不检查
+			// whether it is invalid. If it is invalid, discard it
+			// If the user does not set the ping method, do not check
 			if c.ping != nil {
 				if err := c.Ping(wrapConn.c); err != nil {
 					_ = c.Close(wrapConn.c)
@@ -128,23 +130,6 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 			return wrapConn.c, nil
 		default:
 			c.mu.Lock()
-			if c.openingConnections >= c.maxActive {
-				req := make(chan connReq, 1)
-				c.connReqs = append(c.connReqs, req)
-				c.mu.Unlock()
-				ret, ok := <-req
-				if !ok {
-					return nil, ErrMaxActiveConnReached
-				}
-				if timeout := c.idleTimeout; timeout > 0 {
-					if ret.c.t.Add(timeout).Before(time.Now()) {
-						// 丢弃并关闭该连接
-						_ = c.Close(ret.c.c)
-						continue
-					}
-				}
-				return ret.c.c, nil
-			}
 			if c.factory == nil {
 				c.mu.Unlock()
 				return nil, ErrClosed
@@ -161,42 +146,30 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 	}
 }
 
-// Put 将连接放回pool中
+// Put add the connection back in the pool
 func (c *channelPool) Put(conn *grpc.ClientConn) error {
 	if conn == nil {
 		return errors.New("connection is nil. rejecting")
 	}
-
 	c.mu.Lock()
-
 	if c.connections == nil {
 		c.mu.Unlock()
-		return c.Close(conn)
+		_ = c.Close(conn)
+		return errors.New("connection is nil")
 	}
-
-	if l := len(c.connReqs); l > 0 {
-		req := c.connReqs[0]
-		copy(c.connReqs, c.connReqs[1:])
-		c.connReqs = c.connReqs[:l-1]
-		req <- connReq{
-			c: &Conn{c: conn, t: time.Now()},
-		}
+	select {
+	case c.connections <- &Conn{c: conn, t: time.Now()}:
 		c.mu.Unlock()
 		return nil
-	} else {
-		select {
-		case c.connections <- &Conn{c: conn, t: time.Now()}:
-			c.mu.Unlock()
-			return nil
-		default:
-			c.mu.Unlock()
-			// 连接池已满，直接关闭该连接
-			return c.Close(conn)
-		}
+	default:
+		c.mu.Unlock()
+		// the connection pool is full. Close the connection directly
+		_ = c.Close(conn)
+		return nil
 	}
 }
 
-// Close 关闭单条连接
+// Close connection close
 func (c *channelPool) Close(conn *grpc.ClientConn) error {
 	if conn == nil {
 		return errors.New("connection is nil. rejecting")
@@ -210,7 +183,7 @@ func (c *channelPool) Close(conn *grpc.ClientConn) error {
 	return c.close(conn)
 }
 
-// Ping 检查单条连接是否有效
+// Ping check availability
 func (c *channelPool) Ping(conn *grpc.ClientConn) error {
 	if conn == nil {
 		return errors.New("connection is nil. rejecting")
@@ -218,7 +191,7 @@ func (c *channelPool) Ping(conn *grpc.ClientConn) error {
 	return c.ping(conn)
 }
 
-// Release 释放连接池中所有连接
+// Release all connections in the connection pool drop
 func (c *channelPool) Release() {
 	c.mu.Lock()
 	connections := c.connections
@@ -227,18 +200,16 @@ func (c *channelPool) Release() {
 	c.ping = nil
 	c.close = nil
 	c.mu.Unlock()
-
 	if connections == nil {
 		return
 	}
-
 	close(connections)
 	for wrapConn := range connections {
 		_ = c.close(wrapConn.c)
 	}
 }
 
-// Len 连接池中已有的连接
+// Len gen connection length
 func (c *channelPool) Len() int {
 	return len(c.getConnection())
 }
