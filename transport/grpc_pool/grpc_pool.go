@@ -30,10 +30,6 @@ type Config struct {
 	IdleTimeout time.Duration
 }
 
-type connReq struct {
-	c *Conn
-}
-
 // channelPool 存放连接信息
 type channelPool struct {
 	mu                 sync.RWMutex                     // lock
@@ -44,7 +40,6 @@ type channelPool struct {
 	idleTimeout        time.Duration                    // every connection maximum duration available
 	maxCap             int                              // maximum number of connections
 	openingConnections int                              // open ing connection
-	connQueue          []chan connReq
 }
 
 // Conn connection of grpc
@@ -108,7 +103,7 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 		select {
 		case wrapConn := <-connections:
 			if wrapConn == nil {
-				//return nil, ErrClosed
+				// return nil, ErrClosed
 				continue
 			}
 			// whether the timeout occurs, and discard the timeout
@@ -127,6 +122,8 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 					continue
 				}
 			}
+			// append used conn to the end
+			c.connections <- wrapConn
 			return wrapConn.c, nil
 		default:
 			c.mu.Lock()
@@ -141,6 +138,8 @@ func (c *channelPool) Get() (*grpc.ClientConn, error) {
 			}
 			c.openingConnections++
 			c.mu.Unlock()
+			// add to buff
+			c.connections <- &Conn{c: conn, t: time.Now()}
 			return conn, nil
 		}
 	}
