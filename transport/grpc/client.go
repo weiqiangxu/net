@@ -3,6 +3,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+
 	grpcPrometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	"github.com/opentracing/opentracing-go"
 	prom "github.com/prometheus/client_golang/prometheus"
